@@ -3,6 +3,8 @@ import socket
 import threading
 import tkinter as tk
 from tkinter import ttk, messagebox
+from tkinter import filedialog 
+import time
 
 
 class ServerGUI:
@@ -85,8 +87,12 @@ class ServerGUI:
         win.title(f"Проводник: {client_id}")
         win.geometry("500x500")
 
-        lbl = tk.Label(win, text=f"Шлях: {current_path}", fg="blue")
+        lbl = tk.Label(win, text=f"Путь: {current_path}", fg="blue")
         lbl.pack(fill=tk.X)
+
+        btn_upload = tk.Button(win, text="Згрузить файл",
+                               command=lambda: self.upload_file(client_id, current_path, win))
+        btn_upload.pack(fill=tk.X, pady=5)
 
         listbox = tk.Listbox(win)
         listbox.pack(fill=tk.BOTH, expand=True)
@@ -103,6 +109,36 @@ class ServerGUI:
                 win.destroy()
 
         listbox.bind("<Double-1>", open_item)
+
+    def upload_file(self, client_id, target_dir, explorer_win):
+        filepath = filedialog.askopenfilename()
+        if not filepath:
+            return
+
+        filename = os.path.basename(filepath)
+        filesize = os.path.getsize(filepath)
+        target_path = os.path.join(target_dir, filename)
+
+        try:
+            header = f"FILE_UPLOAD:{target_path}||{filesize}"
+            self.active_connections[client_id].send(header.encode('utf-8'))
+
+            time.sleep(0.5)
+
+            with open(filepath, "rb") as f:
+                while True:
+                    bytes_read = f.read(1024)
+                    if not bytes_read:
+                        break
+                    self.active_connections[client_id].sendall(bytes_read)
+
+            messagebox.showinfo("Успіх", f"Файл {filename} загружен!")
+
+            self.active_connections[client_id].send(f"LIST_DIR:{target_dir}".encode('utf-8'))
+            explorer_win.destroy()
+
+        except Exception as e:
+            messagebox.showerror("Ошибка", f"Не удалось открыть файл: {e}")
 
     def send_command(self, cmd):
         selected_item = self.tree.selection()

